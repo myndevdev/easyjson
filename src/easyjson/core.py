@@ -83,7 +83,13 @@ def read_chaine(file, chaine):
 
     return data[chaine]
 
-def delete(file, chaine):
+def delete(file, chaine) -> tuple[str, str]:
+    """Remove the key chaine from an existing JSON object.
+
+    A missing key raises KeyError before the file is reopened for writing,
+    so the file stays intact. Removing the last key leaves an empty object.
+    Returns the (file, chaine) pair.
+    """
     try:
         with open(file, encoding="utf-8") as f:
             data = json.load(f)
