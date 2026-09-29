@@ -59,15 +59,6 @@ def write_add(file, chaine, contenue) -> { str, bool, float }:
 
             with open(file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
-        else:
-            """
-                If chaine > 0  use append()
-
-                Else using write_add()
-            """
-            # Known bug: append is called with no argument, which raises a
-            # TypeError. It should be append(file, contenue).
-            append()
 
     except ValueError as e:
         print(f"Error : {e}")

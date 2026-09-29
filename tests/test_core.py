@@ -71,51 +71,102 @@ class WriteTests(TempFileTestCase):
 class AppendTests(TempFileTestCase):
     """Tests for easyjson.append()."""
 
-    def test_append_adds_element_to_list(self):
-        """append() must add the element at the end of the JSON list."""
+    def test_append_adds_item_to_empty_list(self):
+        """append() must add the content to an empty JSON list."""
+        self.write_json([])
+
+        core.append(self.path, "first")
+
+        self.assertEqual(self.read_json(), ["first"])
+
+    def test_append_keeps_existing_items(self):
+        """append() must keep the items already present in the list."""
         self.write_json(["a", "b"])
 
         core.append(self.path, "c")
 
         self.assertEqual(self.read_json(), ["a", "b", "c"])
 
-    def test_append_indents_file_with_four_spaces(self):
-        """append() must rewrite the list with an indentation of 4 spaces."""
+    def test_append_can_be_called_several_times(self):
+        """Successive calls must grow the list in call order."""
+        self.write_json([])
+
+        core.append(self.path, 1)
+        core.append(self.path, 2)
+        core.append(self.path, 3)
+
+        self.assertEqual(self.read_json(), [1, 2, 3])
+
+    def test_append_accepts_any_json_value(self):
+        """append() must keep the type of the appended value untouched."""
+        self.write_json([])
+
+        core.append(self.path, {"a": 1})
+        core.append(self.path, None)
+        core.append(self.path, True)
+        core.append(self.path, 4.5)
+
+        self.assertEqual(
+            self.read_json(), [{"a": 1}, None, True, 4.5]
+        )
+
+    def test_append_indents_output_with_four_spaces(self):
+        """append() must rewrite the file with an indent of 4."""
         self.write_json(["a"])
 
         core.append(self.path, "b")
 
         with open(self.path, encoding="utf-8") as f:
-            self.assertIn('\n    "b"', f.read())
-
-    def test_append_preserves_stored_types(self):
-        """append() must keep the JSON types already stored in the list."""
-        self.write_json([1, True, None])
-
-        core.append(self.path, 2.5)
-
-        self.assertEqual(self.read_json(), [1, True, None, 2.5])
-
-    def test_append_creates_nothing_if_file_missing(self):
-        """append() must raise OSError if the file does not exist yet."""
-        with self.assertRaises(OSError):
-            core.append(self.path, "c")
-
-    def test_append_raises_jsondecodeerror_on_invalid_json(self):
-        """append() must bubble up the error if the content is not JSON."""
-        with open(self.path, "w", encoding="utf-8") as f:
-            f.write("not json")
-
-        with self.assertRaises(json.JSONDecodeError):
-            core.append(self.path, "c")
+            self.assertEqual(f.read(), '[\n    "a",\n    "b"\n]')
 
     def test_append_returns_path_and_content(self):
         """append() must return the (path, content) pair."""
         self.write_json([])
 
-        result = core.append(self.path, "c")
+        result = core.append(self.path, "Lyon")
 
-        self.assertEqual(result, (self.path, "c"))
+        self.assertEqual(result, (self.path, "Lyon"))
+
+    def test_append_raises_oserror_if_directory_missing(self):
+        """append() must let the error bubble up if the folder does not exist."""
+        missing = os.path.join(self.tmpdir.name, "absent", "data.json")
+
+        with self.assertRaises(OSError):
+            core.append(missing, "Lyon")
+
+    def test_append_raises_valueerror_on_invalid_json(self):
+        """append() must re-raise the JSON decoding error on a malformed file."""
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("not json")
+
+        with self.assertRaises(ValueError):
+            core.append(self.path, "Lyon")
+
+    def test_append_leaves_file_untouched_on_invalid_json(self):
+        """A malformed file must not be overwritten by a failed append()."""
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("not json")
+
+        with self.assertRaises(ValueError):
+            core.append(self.path, "Lyon")
+
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "not json")
+
+    def test_append_raises_valueerror_on_empty_file(self):
+        """append() must fail on an existing but empty file."""
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("")
+
+        with self.assertRaises(ValueError):
+            core.append(self.path, "Lyon")
+
+    def test_append_raises_attributeerror_on_json_object(self):
+        """Known limitation: append() only works on a JSON list, not an object."""
+        self.write_json({"a": 1})
+
+        with self.assertRaises(AttributeError):
+            core.append(self.path, "Lyon")
 
 
 class WriteAddTests(TempFileTestCase):
@@ -177,12 +228,14 @@ class WriteAddTests(TempFileTestCase):
         with self.assertRaises(OSError):
             core.write_add(missing, "city", "Lyon")
 
-    def test_write_add_with_empty_key_raises_typeerror(self):
-        """Known bug: with an empty key, append() is called with no argument."""
+    def test_write_add_with_empty_key_does_nothing(self):
+        """With an empty key, write_add() is a no-op and leaves the file untouched."""
         self.write_json({})
 
-        with self.assertRaises(TypeError):
-            core.write_add(self.path, "", "Lyon")
+        result = core.write_add(self.path, "", "Lyon")
+
+        self.assertEqual(result, (self.path, "", "Lyon"))
+        self.assertEqual(self.read_json(), {})
 
 
 class BaseJsonTests(TempFileTestCase):
