@@ -1,0 +1,279 @@
+<!doctype html public "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta name="GENERATOR" content="opencode">
+   <title>Unit Testing Guide for easyjson</title>
+</head>
+<body>
+
+<center>
+<h1>
+&nbsp;Unit Testing Guide for easyjson</h1></center>
+
+<center><i>easyjson project</i>
+<br><i>Rev 1.1</i>
+<br><i>2026 Sep 29</i></center>
+
+<p>This document describes how the <i>easyjson</i> package is tested.&nbsp; It covers the
+test layout, the conventions used by <i>unittest</i>, the way errors are verified, and
+the <i>pytest</i> equivalents.&nbsp; In this document, the term <i>test</i> means a
+single verifiable behaviour of a single function.
+<h3>
+Requirements</h3>
+The overriding requirement is that every public function of <i>easyjson.core</i> must
+be covered by at least one test per behaviour, and that no test may depend on another
+test.&nbsp; Tests must never write inside the repository, they must never depend on
+the current working directory, and they must be runnable from a clean checkout with
+a single command.
+<p>Falling out from this work is a fast feedback loop: a test that fails must point at a
+single behaviour, so the failure has to be readable from the test name alone.
+<p>The only dependency is <i>pytest</i>, declared in the <i>dev</i> group of
+<i>pyproject.toml</i>.&nbsp; The test file itself imports nothing but the standard
+library and <i>easyjson</i>, so <i>unittest</i> remains usable without <i>pytest</i>
+installed.
+<p><i>pyproject.toml</i> sets <i>testpaths = ["tests"]</i>, therefore no path argument
+is needed when running the tests.
+<h2>
+<a NAME="Test Layout"></a>Test Layout</h2>
+The test suite is a single file, with one class per tested function.
+<pre>
+tests/
+&nbsp;&nbsp;&nbsp;&nbsp;test_core.py
+src/
+&nbsp;&nbsp;&nbsp;&nbsp;easyjson/
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__init__.py
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;core.py&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* write, append, write_add, base_json */
+docs/
+&nbsp;&nbsp;&nbsp;&nbsp;index.html&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* This document */
+</pre>
+The class names are the function names suffixed with <i>Tests</i>.
+<pre>WriteTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.write() */
+AppendTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.append() */
+WriteAddTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.write_add() */
+BaseJsonTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.base_json() */</pre>
+<i>write_add</i> and <i>base_json</i> are not exported by
+<i>easyjson/__init__.py</i>, so the test file imports them through the module:
+<pre>import easyjson
+from easyjson import core</pre>
+The public signatures under test are the following.&nbsp; Note that <i>write_add</i>
+takes the file path first and the key second.
+<pre>write(file, contenue)
+append(file, contenue)
+write_add(file, chaine, contenue)
+base_json()</pre>
+<h2>
+<a NAME="Running the Tests"></a>Running the Tests</h2>
+Both runners work, since the test file uses only <i>unittest</i> constructs.
+<pre>uv run pytest&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* recommended */
+python -m pytest -v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* verbose, test names shown */
+python -m unittest discover -s tests -v</pre>
+Coverage is optional and requires <i>pytest-cov</i>.
+<pre>uv run pytest --cov=src/easyjson --cov-report=term-missing</pre>
+<i>term-missing</i> lists the lines that are not covered.&nbsp; It is useful to find
+dead code, it is not useful to chase a 100 % rate: a rarely reached <i>except</i>
+branch can legitimately stay uncovered.
+<h2>
+<a NAME="Test Anatomy"></a>Test Anatomy</h2>
+Every tested function gets its own class, inheriting from <i>unittest.TestCase</i>.
+<pre>class WriteAddTests(TempFileTestCase):
+&nbsp;&nbsp;&nbsp;&nbsp;"""Tests for easyjson.write_add()."""
+
+&nbsp;&nbsp;&nbsp;&nbsp;def test_write_add_creates_key(self):
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"""write_add() must add the key with the given value."""
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.write_json({})
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;core.write_add(self.path, "city", "Nimes")
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.assertEqual(self.read_json(), {"city": "Nimes"})</pre>
+Three conventions structure the whole file.&nbsp; The class name is the tested
+function name followed by <i>Tests</i>.&nbsp; Every method name starts with
+<i>test_</i>, otherwise <i>unittest</i> skips it silently.&nbsp; Every method
+receives <i>self</i>, which gives access to the assertions.
+<p>The documentation string of a test states the behaviour in the third person, in
+the present tense, prefixed by the name of the function under test.
+<h2>
+<a NAME="Assertions"></a>Assertions</h2>
+The assertion methods used by the suite are the following.
+<pre>self.assertEqual(a, b)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* a == b */
+self.assertNotEqual(a, b)&nbsp;&nbsp;&nbsp;&nbsp; /* a != b */
+self.assertTrue(x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* bool(x) is true */
+self.assertFalse(x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* bool(x) is false */
+self.assertIn(x, collection)&nbsp;&nbsp; /* x in collection */
+self.assertIsNone(x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* x is None */
+self.assertTrue(os.path.exists(p))</pre>
+The expected value always comes first, the actual value second.&nbsp; The reverse
+order makes a test that should fail pass.
+<h2>
+<a NAME="Isolation"></a>Isolation</h2>
+<i>setUp</i> runs automatically before each test, <i>tearDown</i> after.&nbsp; That
+is what gives every test an identical starting state.&nbsp; The base class creates
+one temp folder and one file path per test.
+<pre>class TempFileTestCase(unittest.TestCase):
+&nbsp;&nbsp;&nbsp;&nbsp;def setUp(self):
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.tmpdir = tempfile.TemporaryDirectory()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.addCleanup(self.tmpdir.cleanup)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.path = os.path.join(self.tmpdir.name, "data.json")</pre>
+<i>addCleanup</i> registers an action to run at the end of the test, even if the
+test fails.&nbsp; It is preferred over <i>tearDown</i> for the cleanup because it
+cannot be forgotten and it always runs.&nbsp; Two helpers read and write the JSON
+file under test.
+<pre>def read_json(self, path=None):
+&nbsp;&nbsp;&nbsp;&nbsp;with open(path or self.path, encoding="utf-8") as f:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return json.load(f)
+
+def write_json(self, data, path=None):
+&nbsp;&nbsp;&nbsp;&nbsp;with open(path or self.path, "w", encoding="utf-8") as f:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;json.dump(data, f)</pre>
+<i>base_json</i> writes <i>data.json</i> in the current directory, so
+<i>BaseJsonTests</i> changes the working directory to the temp folder and restores
+it with a cleanup.
+<pre>def setUp(self):
+&nbsp;&nbsp;&nbsp;&nbsp;super().setUp()
+&nbsp;&nbsp;&nbsp;&nbsp;previous = os.getcwd()
+&nbsp;&nbsp;&nbsp;&nbsp;self.addCleanup(os.chdir, previous)
+&nbsp;&nbsp;&nbsp;&nbsp;os.chdir(self.tmpdir.name)</pre>
+<h2>
+<a NAME="Errors"></a>Verifying Errors</h2>
+The pattern is always a <i>with</i> block around the call that is expected to fail.
+<pre>def test_write_raises_oserror_if_directory_missing(self):
+&nbsp;&nbsp;&nbsp;&nbsp;missing = os.path.join(self.tmpdir.name, "absent", "data.json")
+
+&nbsp;&nbsp;&nbsp;&nbsp;with self.assertRaises(OSError):
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;easyjson.write(missing, "content")</pre>
+If no exception is raised, the test fails.&nbsp; <i>assertRaisesRegex</i> also
+checks the error message.
+<pre>with self.assertRaisesRegex(ValueError, "Invalid control character"):
+&nbsp;&nbsp;&nbsp;&nbsp;easyjson.write(self.path, "contenu\0")</pre>
+The exceptions actually produced by the package are:
+<table border="1">
+<tr><th>Call</th><th>Condition</th><th>Exception</th></tr>
+<tr>
+<td><i>write</i></td>
+<td>folder does not exist</td>
+<td>OSError</td>
+</tr>
+<tr>
+<td><i>append</i></td>
+<td>file does not exist</td>
+<td>OSError</td>
+</tr>
+<tr>
+<td><i>append</i></td>
+<td>file is not valid JSON</td>
+<td>json.JSONDecodeError</td>
+</tr>
+<tr>
+<td><i>append</i></td>
+<td>JSON is not a list</td>
+<td>TypeError</td>
+</tr>
+<tr>
+<td><i>write_add</i></td>
+<td>folder does not exist</td>
+<td>OSError</td>
+</tr>
+<tr>
+<td><i>write_add</i></td>
+<td>file is not valid JSON</td>
+<td>json.JSONDecodeError</td>
+</tr>
+<tr>
+<td><i>write_add</i></td>
+<td>JSON is not an object</td>
+<td>TypeError</td>
+</tr>
+<tr>
+<td><i>write_add</i></td>
+<td>key is empty</td>
+<td>TypeError</td>
+</tr>
+<tr>
+<td><i>base_json</i></td>
+<td>always</td>
+<td>TypeError</td>
+</tr>
+</table>
+<i>json.JSONDecodeError</i> inherits from <i>ValueError</i>, which is the exception
+caught and re-raised by the <i>except</i> blocks of the package.
+<h2>
+<a NAME="Behaviour"></a>Behaviour, Not Code</h2>
+A test verifies a behaviour, it does not track a line.&nbsp; A function is a single
+unit, there is no reason to split its tests into one class per branch.
+<ul>
+<li>
+<i>test_write_add_replaces_existing_key</i> exists because overwriting a key is a
+consequence of the implementation, not because a particular line ran.</li>
+
+<li>
+<i>test_write_add_converts_content_to_string</i> exists because the value goes
+through an f-string, and that is part of the public contract.</li>
+
+<li>
+<i>test_append_indents_file_with_four_spaces</i> exists because the indentation of
+the rewritten file is visible to whoever opens the file.</li>
+</ul>
+<p>Each test must be able to fail on its own.&nbsp; If
+<i>test_write_add_creates_key</i> breaks, the diagnosis must come from that test,
+not from a previous test having left a corrupted file.&nbsp; That is what the per
+test temp folders are for.
+<p>The test name must be enough to understand the failure without opening the
+file.&nbsp; <i>test_append_raises_jsondecodeerror_on_invalid_json</i> is better
+than <i>test_append_2</i>.
+<h2>
+<a NAME="pytest"></a>pytest</h2>
+<i>pytest</i> is a layer on top of <i>unittest</i>, everything that works here works
+there too.&nbsp; The assertions are written with a bare <i>assert</i>, with no
+method call.
+<pre>def test_write_returns_path_and_content():
+&nbsp;&nbsp;&nbsp;&nbsp;result = easyjson.write(chemin, '{"b": 2}')
+&nbsp;&nbsp;&nbsp;&nbsp;assert result == (chemin, '{"b": 2}')</pre>
+Repeated tests collapse into a single test with <i>parametrize</i>.
+<pre>@pytest.mark.parametrize("value, expected", [(1, "1"), (True, "True"), (None, "None")])
+def test_write_add_stores_text(tmp_path, value, expected):
+&nbsp;&nbsp;&nbsp;&nbsp;path = tmp_path / "data.json"
+&nbsp;&nbsp;&nbsp;&nbsp;path.write_text("{}", encoding="utf-8")
+
+&nbsp;&nbsp;&nbsp;&nbsp;core.write_add(str(path), "key", value)
+
+&nbsp;&nbsp;&nbsp;&nbsp;assert json.loads(path.read_text(encoding="utf-8")) == {"key": expected}</pre>
+<i>setUp</i> becomes a fixture, injected by argument name.&nbsp; <i>tmp_path</i>
+replaces <i>tempfile.TemporaryDirectory</i> and provides a <i>pathlib.Path</i>.
+<h2>
+<a NAME="Known Bugs"></a>Known Bugs</h2>
+Two tests document a broken behaviour on purpose.&nbsp; They pass while the bug
+exists, and they fail once the code is fixed, which is the signal to delete or to
+invert them.
+<ul>
+<li>
+<i>test_write_add_with_empty_key_raises_typeerror</i> checks that an empty key
+raises a <i>TypeError</i>, because <i>write_add</i> calls <i>append()</i> with no
+argument.&nbsp; The fix is <i>append(file, contenue)</i>.</li>
+
+<li>
+<i>test_base_json_raises_typeerror_writing_dict</i> checks that passing a
+<i>dict</i> to <i>f.write</i> fails, because <i>f.write</i> expects a string.&nbsp;
+The fix is <i>json.dump(data, f, indent=4)</i>.</li>
+</ul>
+<p>Neither test uses an "expected value" assertion, so neither can mask a regression
+elsewhere.&nbsp; Once a fix lands, the two tests become the specification of the
+fixed behaviour instead of a description of the broken one.
+<p>Changing a signature also breaks the tests.&nbsp; Reordering the parameters of a
+function is a breaking change for every caller, so the call sites inside
+<i>tests/test_core.py</i> and this document must be updated together.
+<h2>
+Risks</h2>
+There are several holes in this design.&nbsp; It is important to document them
+clearly.
+<p>The first is that the suite only checks the behaviour reachable through the public
+functions.&nbsp; <i>append</i> opens its files without an explicit <i>encoding</i>,
+so the behaviour on a non UTF-8 system is untested and relies on the platform
+default.
+<p>The second is that <i>base_json</i> writes to the process working directory, so
+any future version of that function must keep a test isolating the working
+directory, otherwise it will write <i>data.json</i> into the repository.
+<p>The third is that the two known bug tests are green today for the wrong
+reason.&nbsp; A reviewer reading a green suite could conclude the package is fully
+working, which is false until the two fixes land.
+</body>
+</html>
