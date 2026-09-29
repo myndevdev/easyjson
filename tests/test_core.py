@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -180,13 +182,14 @@ class WriteAddTests(TempFileTestCase):
 
         self.assertEqual(self.read_json(), {"city": "Nimes"})
 
-    def test_write_add_replaces_existing_key(self):
-        """write_add() must replace the value of an already present key."""
+    def test_write_add_does_not_replace_existing_key(self):
+        """write_add() must leave an already present key untouched."""
         self.write_json({"city": "Paris"})
 
-        core.write_add(self.path, "city", "Lyon")
+        result = core.write_add(self.path, "city", "Lyon")
 
-        self.assertEqual(self.read_json(), {"city": "Lyon"})
+        self.assertEqual(self.read_json(), {"city": "Paris"})
+        self.assertEqual(result, (self.path, False, "Lyon"))
 
     def test_write_add_converts_content_to_string(self):
         """write_add() must store the value as a string."""
@@ -213,13 +216,13 @@ class WriteAddTests(TempFileTestCase):
 
         self.assertEqual(self.read_json(), {"a": "1", "b": "2"})
 
-    def test_write_add_returns_path_key_and_content(self):
-        """write_add() must return the (path, key, content) tuple."""
+    def test_write_add_returns_path_true_and_content_when_key_is_added(self):
+        """write_add() must return True as second element when the key is added."""
         self.write_json({})
 
         result = core.write_add(self.path, "city", "Lyon")
 
-        self.assertEqual(result, (self.path, "city", "Lyon"))
+        self.assertEqual(result, (self.path, True, "Lyon"))
 
     def test_write_add_raises_oserror_if_directory_missing(self):
         """write_add() must let the error bubble up if the folder does not exist."""
@@ -236,6 +239,174 @@ class WriteAddTests(TempFileTestCase):
 
         self.assertEqual(result, (self.path, "", "Lyon"))
         self.assertEqual(self.read_json(), {})
+
+
+class ReadChaineTests(TempFileTestCase):
+    """Tests for easyjson.read_chaine()."""
+
+    def test_read_chaine_returns_value(self):
+        """read_chaine() must return the value stored under the key."""
+        self.write_json({"city": "Nimes"})
+
+        self.assertEqual(core.read_chaine(self.path, "city"), "Nimes")
+
+    def test_read_chaine_keeps_value_type(self):
+        """read_chaine() must not convert the stored value."""
+        self.write_json({"number": 42, "flag": True, "nothing": None})
+
+        self.assertEqual(core.read_chaine(self.path, "number"), 42)
+        self.assertEqual(core.read_chaine(self.path, "flag"), True)
+        self.assertIsNone(core.read_chaine(self.path, "nothing"))
+
+    def test_read_chaine_reads_nested_value(self):
+        """read_chaine() must return a nested object or list as is."""
+        self.write_json({"account": {"user": "sionukk"}, "cities": ["Nimes"]})
+
+        self.assertEqual(core.read_chaine(self.path, "account"), {"user": "sionukk"})
+        self.assertEqual(core.read_chaine(self.path, "cities"), ["Nimes"])
+
+    def test_read_chaine_prints_value(self):
+        """read_chaine() must also print the value it reads."""
+        self.write_json({"city": "Nimes"})
+        buffer = io.StringIO()
+
+        with contextlib.redirect_stdout(buffer):
+            core.read_chaine(self.path, "city")
+
+        self.assertEqual(buffer.getvalue(), "Nimes\n")
+
+    def test_read_chaine_does_not_modify_file(self):
+        """read_chaine() must leave the file byte for byte untouched."""
+        self.write_json({"city": "Nimes"})
+
+        with open(self.path, encoding="utf-8") as f:
+            before = f.read()
+
+        core.read_chaine(self.path, "city")
+
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(f.read(), before)
+
+    def test_read_chaine_raises_keyerror_on_missing_key(self):
+        """read_chaine() must raise KeyError when the key is absent."""
+        self.write_json({"city": "Nimes"})
+
+        with self.assertRaises(KeyError):
+            core.read_chaine(self.path, "absent")
+
+    def test_read_chaine_raises_oserror_if_directory_missing(self):
+        """read_chaine() must let the error bubble up if the folder does not exist."""
+        missing = os.path.join(self.tmpdir.name, "absent", "data.json")
+
+        with self.assertRaises(OSError):
+            core.read_chaine(missing, "city")
+
+    def test_read_chaine_raises_valueerror_on_invalid_json(self):
+        """read_chaine() must re-raise the decoding error on a malformed file."""
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("not json")
+
+        with self.assertRaises(ValueError):
+            core.read_chaine(self.path, "city")
+
+    def test_read_chaine_raises_typeerror_on_json_list(self):
+        """Known limitation: read_chaine() only works on a JSON object, not a list."""
+        self.write_json(["Nimes"])
+
+        with self.assertRaises(TypeError):
+            core.read_chaine(self.path, "0")
+
+class DeleteTests(TempFileTestCase):
+    """Tests for easyjson.delete()."""
+
+    def test_delete_removes_key(self):
+        """delete() must remove the key from the object."""
+        self.write_json({"city": "Nimes", "code": "30"})
+
+        core.delete(self.path, "city")
+
+        self.assertEqual(self.read_json(), {"code": "30"})
+
+    def test_delete_keeps_other_keys(self):
+        """delete() must preserve the keys that are not deleted."""
+        self.write_json({"a": "1", "b": "2", "c": "3"})
+
+        core.delete(self.path, "b")
+
+        self.assertEqual(self.read_json(), {"a": "1", "c": "3"})
+
+    def test_delete_returns_path_and_key(self):
+        """delete() must return the (path, key) pair."""
+        self.write_json({"city": "Nimes"})
+
+        result = core.delete(self.path, "city")
+
+        self.assertEqual(result, (self.path, "city"))
+
+    def test_delete_empties_object_but_keeps_file(self):
+        """delete() must leave an empty object, not delete the file."""
+        self.write_json({"city": "Nimes"})
+
+        core.delete(self.path, "city")
+
+        self.assertTrue(os.path.exists(self.path))
+        self.assertEqual(self.read_json(), {})
+
+    def test_delete_does_not_escape_non_ascii(self):
+        """delete() must keep accented characters without Unicode escaping."""
+        self.write_json({"city": "Nîmes", "code": "30"})
+
+        core.delete(self.path, "code")
+
+        with open(self.path, encoding="utf-8") as f:
+            self.assertIn("Nîmes", f.read())
+
+    def test_delete_indents_output_with_four_spaces(self):
+        """delete() must rewrite the file with an indent of 4."""
+        self.write_json({"a": "1", "b": "2"})
+
+        core.delete(self.path, "b")
+
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(f.read(), '{\n    "a": "1"\n}')
+
+    def test_delete_raises_keyerror_on_missing_key(self):
+        """delete() must raise KeyError when the key is absent."""
+        self.write_json({"city": "Nimes"})
+
+        with self.assertRaises(KeyError):
+            core.delete(self.path, "absent")
+
+    def test_delete_leaves_file_untouched_on_missing_key(self):
+        """A KeyError must not overwrite the file."""
+        self.write_json({"city": "Nimes"})
+
+        with self.assertRaises(KeyError):
+            core.delete(self.path, "absent")
+
+        self.assertEqual(self.read_json(), {"city": "Nimes"})
+
+    def test_delete_raises_oserror_if_directory_missing(self):
+        """delete() must let the error bubble up if the folder does not exist."""
+        missing = os.path.join(self.tmpdir.name, "absent", "data.json")
+
+        with self.assertRaises(OSError):
+            core.delete(missing, "city")
+
+    def test_delete_raises_valueerror_on_invalid_json(self):
+        """delete() must re-raise the decoding error on a malformed file."""
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("not json")
+
+        with self.assertRaises(ValueError):
+            core.delete(self.path, "city")
+
+    def test_delete_raises_typeerror_on_json_list(self):
+        """Known limitation: delete() only works on a JSON object, not a list."""
+        self.write_json(["Nimes"])
+
+        with self.assertRaises(TypeError):
+            core.delete(self.path, "0")
 
 
 class BaseJsonTests(TempFileTestCase):

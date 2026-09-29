@@ -21,6 +21,10 @@ env/
 .coverage
 htmlcov/
 
+# Data files produced by running the examples or the tests
+comptes.json
+data.json
+
 # IDE / OS
 .idea/
 .vscode/

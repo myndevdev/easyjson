@@ -1,5 +1,6 @@
 import json
 
+
 def write(file, contenue) -> str:
     """Write raw text to a file, overwriting any existing content.
 
@@ -14,7 +15,7 @@ def write(file, contenue) -> str:
         raise
     return (file, contenue)
 
-def append(file, contenue) -> { str,  bool,  float }:
+def append(file, contenue) -> tuple[ str,  bool,  float ]:
 
     """
         Just Try open and read file
@@ -27,47 +28,75 @@ def append(file, contenue) -> { str,  bool,  float }:
     """
 
     try:
-        with open(file, "r") as f:
+        with open(file, encoding="utf-8") as f:
             data = json.load(f)
 
         data.append(contenue)
 
-        with open(file, "w") as f:
+        with open(file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-    except ValueError as e:
+    except ValueError:
         print("Error {e}")
         raise
     return (file, contenue)
 
 
-def write_add(file, chaine, contenue) -> { str, bool, float }:
+def write_add(file, chaine, contenue) -> tuple[str, bool, float]:
     """Add the key chaine with the value contenue to an existing JSON object.
 
     The value goes through an f-string, so it is always stored as text.
-    An existing key is replaced, not merged.
+    An existing key is not replaced.
     Returns the (file, chaine, contenue) tuple.
     """
     try:
         if len(chaine) > 0:
-            """
-            Read File for Add in file...
-            """
-            with open(file, "r", encoding="utf-8") as f:
+            with open(file, encoding="utf-8") as f:
                 data = json.load(f)
 
-            data[f"{chaine}"] = f"{contenue}"
+            if chaine in data:
+                return file, False, contenue
+
+            data[chaine] = f"{contenue}"
 
             with open(file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
 
-    except ValueError as e:
-        print(f"Error : {e}")
+            return file, True, contenue
+
+    except (FileNotFoundError, json.JSONDecodeError):
         raise
 
     return (file, chaine, contenue)
 
 
-def base_json() -> { str }:
+def read_chaine(file, chaine):
+    try:
+        with open(file, encoding="utf-8") as f:
+            data = json.load(f)
+        print(data[chaine])
+
+    except ValueError as e:
+        print(f"Error {e}")
+        raise
+
+    return data[chaine]
+
+def delete(file, chaine):
+    try:
+        with open(file, encoding="utf-8") as f:
+            data = json.load(f)
+
+        del data[chaine]
+
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except ValueError as e:
+        print(f"Error {e}")
+        raise
+
+    return (file, chaine)
+
+def base_json() -> str:
     """Build an account skeleton and target data.json in the current directory.
 
     Known bug: f.write expects a string while data is a dict, so this call

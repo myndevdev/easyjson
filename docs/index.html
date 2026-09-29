@@ -28,12 +28,15 @@ the current working directory, and they must be runnable from a clean checkout w
 a single command.
 <p>Falling out from this work is a fast feedback loop: a test that fails must point at a
 single behaviour, so the failure has to be readable from the test name alone.
-<p>The only dependency is <i>pytest</i>, declared in the <i>dev</i> group of
-<i>pyproject.toml</i>.&nbsp; The test file itself imports nothing but the standard
-library and <i>easyjson</i>, so <i>unittest</i> remains usable without <i>pytest</i>
-installed.
+<p>The test dependencies are <i>pytest</i>, <i>ruff</i> and <i>mypy</i>, declared in
+the <i>dev</i> group of <i>pyproject.toml</i>.&nbsp; The test file itself imports
+nothing but the standard library and <i>easyjson</i>, so <i>unittest</i> remains
+usable without <i>pytest</i> installed.
 <p><i>pyproject.toml</i> sets <i>testpaths = ["tests"]</i>, therefore no path argument
 is needed when running the tests.
+<p><i>.github/workflows/ci.yml</i> runs the suite on Python 3.9 to 3.13, and runs
+<i>ruff check</i> and <i>mypy</i> on Python 3.13 only, because <i>mypy</i> requires
+3.10 or higher.
 <h2>
 <a NAME="Test Layout"></a>Test Layout</h2>
 The test suite is a single file, with one class per tested function.
@@ -43,7 +46,7 @@ tests/
 src/
 &nbsp;&nbsp;&nbsp;&nbsp;easyjson/
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;__init__.py
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;core.py&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* write, append, write_add, base_json */
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;core.py&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* write, append, write_add, read_chaine, delete, base_json */
 docs/
 &nbsp;&nbsp;&nbsp;&nbsp;index.html&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* This document */
 </pre>
@@ -51,16 +54,20 @@ The class names are the function names suffixed with <i>Tests</i>.
 <pre>WriteTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.write() */
 AppendTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.append() */
 WriteAddTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.write_add() */
+ReadChaineTests&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.read_chaine() */
+DeleteTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.delete() */
 BaseJsonTests&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* easyjson.base_json() */</pre>
-<i>write_add</i> and <i>base_json</i> are not exported by
+<i>read_chaine</i> and <i>delete</i> are not exported by
 <i>easyjson/__init__.py</i>, so the test file imports them through the module:
 <pre>import easyjson
 from easyjson import core</pre>
-The public signatures under test are the following.&nbsp; Note that <i>write_add</i>
-takes the file path first and the key second.
+The public signatures under test are the following.&nbsp; Note that <i>write_add</i>,
+<i>read_chaine</i> and <i>delete</i> take the file path first and the key second.
 <pre>write(file, contenue)
 append(file, contenue)
 write_add(file, chaine, contenue)
+read_chaine(file, chaine)
+delete(file, chaine)
 base_json()</pre>
 <h2>
 <a NAME="Running the Tests"></a>Running the Tests</h2>
@@ -166,7 +173,7 @@ The exceptions actually produced by the package are:
 <tr>
 <td><i>append</i></td>
 <td>JSON is not a list</td>
-<td>TypeError</td>
+<td>AttributeError</td>
 </tr>
 <tr>
 <td><i>write_add</i></td>
@@ -186,6 +193,46 @@ The exceptions actually produced by the package are:
 <tr>
 <td><i>write_add</i></td>
 <td>key is empty</td>
+<td>none, it is a no-op</td>
+</tr>
+<tr>
+<td><i>read_chaine</i></td>
+<td>folder does not exist</td>
+<td>OSError</td>
+</tr>
+<tr>
+<td><i>read_chaine</i></td>
+<td>file is not valid JSON</td>
+<td>json.JSONDecodeError</td>
+</tr>
+<tr>
+<td><i>read_chaine</i></td>
+<td>key is absent</td>
+<td>KeyError</td>
+</tr>
+<tr>
+<td><i>read_chaine</i></td>
+<td>JSON is not an object</td>
+<td>TypeError</td>
+</tr>
+<tr>
+<td><i>delete</i></td>
+<td>folder does not exist</td>
+<td>OSError</td>
+</tr>
+<tr>
+<td><i>delete</i></td>
+<td>file is not valid JSON</td>
+<td>json.JSONDecodeError</td>
+</tr>
+<tr>
+<td><i>delete</i></td>
+<td>key is absent</td>
+<td>KeyError</td>
+</tr>
+<tr>
+<td><i>delete</i></td>
+<td>JSON is not an object</td>
 <td>TypeError</td>
 </tr>
 <tr>
@@ -194,16 +241,19 @@ The exceptions actually produced by the package are:
 <td>TypeError</td>
 </tr>
 </table>
-<i>json.JSONDecodeError</i> inherits from <i>ValueError</i>, which is the exception
-caught and re-raised by the <i>except</i> blocks of the package.
+<i>json.JSONDecodeError</i> inherits from <i>ValueError</i>.&nbsp; The <i>except</i>
+blocks of <i>write</i>, <i>append</i>, <i>read_chaine</i> and <i>delete</i> catch
+<i>ValueError</i>, so they also catch a decoding error.&nbsp; The <i>except</i> block
+of <i>write_add</i> catches <i>FileNotFoundError</i> and <i>json.JSONDecodeError</i>
+and re-raises both unchanged.
 <h2>
 <a NAME="Behaviour"></a>Behaviour, Not Code</h2>
 A test verifies a behaviour, it does not track a line.&nbsp; A function is a single
 unit, there is no reason to split its tests into one class per branch.
 <ul>
 <li>
-<i>test_write_add_replaces_existing_key</i> exists because overwriting a key is a
-consequence of the implementation, not because a particular line ran.</li>
+<i>test_write_add_does_not_replace_existing_key</i> exists because refusing to
+overwrite a key is part of the public contract, not because a particular line ran.</li>
 
 <li>
 <i>test_write_add_converts_content_to_string</i> exists because the value goes
@@ -212,6 +262,11 @@ through an f-string, and that is part of the public contract.</li>
 <li>
 <i>test_append_indents_file_with_four_spaces</i> exists because the indentation of
 the rewritten file is visible to whoever opens the file.</li>
+
+<li>
+<i>test_read_chaine_prints_value</i> exists because the <i>print</i> inside
+<i>read_chaine</i> is visible to the caller even though the function also returns the
+value.</li>
 </ul>
 <p>Each test must be able to fail on its own.&nbsp; If
 <i>test_write_add_creates_key</i> breaks, the diagnosis must come from that test,
@@ -241,23 +296,20 @@ def test_write_add_stores_text(tmp_path, value, expected):
 replaces <i>tempfile.TemporaryDirectory</i> and provides a <i>pathlib.Path</i>.
 <h2>
 <a NAME="Known Bugs"></a>Known Bugs</h2>
-Two tests document a broken behaviour on purpose.&nbsp; They pass while the bug
-exists, and they fail once the code is fixed, which is the signal to delete or to
-invert them.
+One test documents a broken behaviour on purpose.&nbsp; It passes while the bug
+exists, and it fails once the code is fixed, which is the signal to delete or to
+invert it.
 <ul>
-<li>
-<i>test_write_add_with_empty_key_raises_typeerror</i> checks that an empty key
-raises a <i>TypeError</i>, because <i>write_add</i> calls <i>append()</i> with no
-argument.&nbsp; The fix is <i>append(file, contenue)</i>.</li>
-
 <li>
 <i>test_base_json_raises_typeerror_writing_dict</i> checks that passing a
 <i>dict</i> to <i>f.write</i> fails, because <i>f.write</i> expects a string.&nbsp;
 The fix is <i>json.dump(data, f, indent=4)</i>.</li>
 </ul>
-<p>Neither test uses an "expected value" assertion, so neither can mask a regression
-elsewhere.&nbsp; Once a fix lands, the two tests become the specification of the
-fixed behaviour instead of a description of the broken one.
+<p>The empty key is no longer a bug.&nbsp; <i>write_add</i> with an empty key is now
+a documented no-op, checked by <i>test_write_add_with_empty_key_does_nothing</i>.
+<p>The test does not use an "expected value" assertion, so it cannot mask a
+regression elsewhere.&nbsp; Once the fix lands, the test becomes the specification
+of the fixed behaviour instead of a description of the broken one.
 <p>Changing a signature also breaks the tests.&nbsp; Reordering the parameters of a
 function is a breaking change for every caller, so the call sites inside
 <i>tests/test_core.py</i> and this document must be updated together.
@@ -266,14 +318,32 @@ Risks</h2>
 There are several holes in this design.&nbsp; It is important to document them
 clearly.
 <p>The first is that the suite only checks the behaviour reachable through the public
-functions.&nbsp; <i>append</i> opens its files without an explicit <i>encoding</i>,
-so the behaviour on a non UTF-8 system is untested and relies on the platform
-default.
+functions.&nbsp; The <i>encoding</i> argument is now explicit in
+<i>write</i>, <i>append</i>, <i>write_add</i>, <i>read_chaine</i> and <i>delete</i>,
+so they are all UTF-8 regardless of the platform default.
 <p>The second is that <i>base_json</i> writes to the process working directory, so
 any future version of that function must keep a test isolating the working
 directory, otherwise it will write <i>data.json</i> into the repository.
-<p>The third is that the two known bug tests are green today for the wrong
-reason.&nbsp; A reviewer reading a green suite could conclude the package is fully
-working, which is false until the two fixes land.
+<p>The third is that <i>write_add</i> does not return the same shape on every path.
+The two success paths return <i>(file, bool, contenu)</i>, while the empty key path
+falls through to <i>(file, chaine, contenu)</i>, where the second element is the key
+instead of a bool.&nbsp; The annotation <i>tuple[str, bool, float]</i> therefore
+describes the two success paths only.&nbsp;
+<i>test_write_add_with_empty_key_does_nothing</i> pins the current shape, so it must
+change if the path is normalised.
+<p>The fourth is that <i>write_add</i> has an <i>except</i> block that catches
+<i>FileNotFoundError</i> and <i>json.JSONDecodeError</i> and then re-raises them
+unchanged.&nbsp; It has no observable effect and can be removed.
+<p>The fifth is that <i>read_chaine</i> prints the value and returns it, so the value
+reaches the caller twice.&nbsp; <i>test_read_chaine_prints_value</i> pins the
+<i>print</i>, which must be removed from the test if the <i>print</i> is ever removed
+from the function.
+<p>The sixth is that <i>read_chaine</i> and <i>delete</i> are not exported by
+<i>easyjson/__init__.py</i>, so they are reachable only through
+<i>easyjson.core</i>.&nbsp; <i>write</i>, <i>append</i>, <i>write_add</i> and
+<i>base_json</i> are exported, so the module is inconsistent until they are added.
+<p>The seventh is that the known bug test is green today for the wrong reason.&nbsp;
+A reviewer reading a green suite could conclude the package is fully working, which
+is false until the fix lands.
 </body>
 </html>
