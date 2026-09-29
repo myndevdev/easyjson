@@ -1,8 +1,17 @@
-# easyjson
+# measyjson
 
 A small Python library to make storing and manipulating JSON data easier.
 
 ## Installation
+
+```bash
+python -m pip install measyjson
+```
+
+Le paquet s'installe sous le nom `measyjson`, mais le module s'importe toujours
+sous le nom `easyjson`.
+
+## Installation depuis les sources
 
 ```bash
 python -m pip install -e .
