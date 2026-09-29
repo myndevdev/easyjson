@@ -1,7 +1,8 @@
 import json
+from typing import Any
 
 
-def write(file, contenue) -> str:
+def write(file, contenue) -> tuple[str, str]:
     """Write raw text to a file, overwriting any existing content.
 
     No JSON validation happens here, the content is written as received.
@@ -15,7 +16,8 @@ def write(file, contenue) -> str:
         raise
     return (file, contenue)
 
-def append(file, contenue) -> tuple[ str,  bool,  float ]:
+
+def append(file, contenue) -> tuple[str, Any]:
 
     """
         Just Try open and read file
@@ -35,8 +37,8 @@ def append(file, contenue) -> tuple[ str,  bool,  float ]:
 
         with open(file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-    except ValueError:
-        print("Error {e}")
+    except ValueError as e:
+        print(f"Error {e}")
         raise
     return (file, contenue)
 
@@ -96,11 +98,11 @@ def delete(file, chaine):
 
     return (file, chaine)
 
-def base_json() -> str:
+def base_json() -> dict[str, dict[str, str]]:
     """Build an account skeleton and target data.json in the current directory.
 
-    Known bug: f.write expects a string while data is a dict, so this call
-    always raises a TypeError. It should be json.dump(data, f, indent=4).
+    The object is serialised with json.dump, so data.json receives valid JSON.
+    Returns the dict that was written.
     """
     try:
         data = {
@@ -111,7 +113,7 @@ def base_json() -> str:
         }
 
         with open("data.json", "w", encoding="utf-8") as f:
-            f.write(data)
+            json.dump(data, f, indent=4)
 
     except Exception as e:
         print(f"Error {e}")

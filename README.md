@@ -104,12 +104,13 @@ fichier n'est donc pas touche.
 Cree un squelette de compte et vise `data.json` dans le repertoire courant.
 
 ```python
-easyjson.base_json()
+data = easyjson.base_json()
+# {"Account": {"user": "username", "password": "password"}}
 ```
 
-Cette fonction est cassee : elle passe un `dict` a `f.write` qui attend une chaine,
-donc elle leve toujours `TypeError`. Le fichier `data.json` est neanmoins cree, vide.
-Le correctif est `json.dump(data, f, indent=4)`.
+Le dict est serialise avec `json.dump(data, f, indent=4)`, donc `data.json` recoit du
+JSON valide. La fonction retourne le dict ecrit. Elle leve `OSError` si le repertoire
+courant n'est pas inscriptible.
 
 ## Exceptions
 
@@ -131,7 +132,7 @@ Le correctif est `json.dump(data, f, indent=4)`.
 | `delete` | JSON invalide | `json.JSONDecodeError` |
 | `delete` | cle absente | `KeyError` |
 | `delete` | JSON pas un objet | `TypeError` |
-| `base_json` | toujours | `TypeError` |
+| `base_json` | repertoire non inscriptible | `OSError` |
 
 `json.JSONDecodeError` herite de `ValueError`. Les blocs `except` de `write`,
 `append`, `read_chaine` et `delete` attrapent `ValueError`, donc aussi une erreur de

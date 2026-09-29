@@ -419,21 +419,36 @@ class BaseJsonTests(TempFileTestCase):
         self.addCleanup(os.chdir, previous)
         os.chdir(self.tmpdir.name)
 
-    def test_base_json_raises_typeerror_writing_dict(self):
-        """Known bug: a dict is passed to f.write, which expects a string."""
-        with self.assertRaises(TypeError):
-            core.base_json()
+    def test_base_json_returns_the_account_skeleton(self):
+        """base_json() must return the account dict that was written."""
+        result = core.base_json()
+
+        self.assertEqual(
+            result,
+            {"Account": {"user": "username", "password": "password"}},
+        )
 
     def test_base_json_targets_data_json_in_current_directory(self):
         """base_json() must target data.json in the current directory."""
         cwd_data = os.path.join(self.tmpdir.name, "data.json")
 
-        with self.assertRaises(TypeError):
-            core.base_json()
+        core.base_json()
 
         self.assertTrue(os.path.exists(cwd_data))
-        with open(cwd_data, encoding="utf-8") as f:
-            self.assertEqual(f.read(), "")
+        self.assertEqual(
+            self.read_json(cwd_data),
+            {"Account": {"user": "username", "password": "password"}},
+        )
+
+    def test_base_json_writes_valid_json_with_indent_four(self):
+        """base_json() must serialise the dict through json.dump, not f.write."""
+        core.base_json()
+
+        with open(os.path.join(self.tmpdir.name, "data.json"), encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("\n    ", content)
+        self.assertIn('"Account"', content)
 
 
 if __name__ == "__main__":

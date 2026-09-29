@@ -237,8 +237,8 @@ The exceptions actually produced by the package are:
 </tr>
 <tr>
 <td><i>base_json</i></td>
-<td>always</td>
-<td>TypeError</td>
+<td>folder is not writable</td>
+<td>OSError</td>
 </tr>
 </table>
 <i>json.JSONDecodeError</i> inherits from <i>ValueError</i>.&nbsp; The <i>except</i>
@@ -296,20 +296,25 @@ def test_write_add_stores_text(tmp_path, value, expected):
 replaces <i>tempfile.TemporaryDirectory</i> and provides a <i>pathlib.Path</i>.
 <h2>
 <a NAME="Known Bugs"></a>Known Bugs</h2>
-One test documents a broken behaviour on purpose.&nbsp; It passes while the bug
-exists, and it fails once the code is fixed, which is the signal to delete or to
-invert it.
+<p>No test currently documents a broken behaviour.&nbsp; Both known bugs have been
+fixed, and the two tests that pinned them were inverted into the specification of the
+fixed behaviour.
 <ul>
 <li>
-<i>test_base_json_raises_typeerror_writing_dict</i> checks that passing a
-<i>dict</i> to <i>f.write</i> fails, because <i>f.write</i> expects a string.&nbsp;
-The fix is <i>json.dump(data, f, indent=4)</i>.</li>
+<i>test_base_json_writes_valid_json_with_indent_four</i> replaces the former
+<i>test_base_json_raises_typeerror_writing_dict</i>.&nbsp; <i>base_json</i> used to
+pass a <i>dict</i> to <i>f.write</i>, which expects a string, so it raised a
+<i>TypeError</i> on every call and left <i>data.json</i> empty.&nbsp; It now calls
+<i>json.dump(data, f, indent=4)</i>.</li>
+
+<li>
+<i>test_write_add_with_empty_key_does_nothing</i> replaces the former
+<i>test_write_add_with_empty_key_raises_typeerror</i>.&nbsp; An empty key is now a
+documented no-op instead of an error.</li>
 </ul>
-<p>The empty key is no longer a bug.&nbsp; <i>write_add</i> with an empty key is now
-a documented no-op, checked by <i>test_write_add_with_empty_key_does_nothing</i>.
-<p>The test does not use an "expected value" assertion, so it cannot mask a
-regression elsewhere.&nbsp; Once the fix lands, the test becomes the specification
-of the fixed behaviour instead of a description of the broken one.
+<p>A test that pins a broken behaviour passes while the bug exists and fails once the
+code is fixed, which is the signal to invert it.&nbsp; Neither of the two tests above
+used an "expected value" assertion, so neither could mask a regression elsewhere.
 <p>Changing a signature also breaks the tests.&nbsp; Reordering the parameters of a
 function is a breaking change for every caller, so the call sites inside
 <i>tests/test_core.py</i> and this document must be updated together.
@@ -342,8 +347,9 @@ from the function.
 <i>easyjson/__init__.py</i>, so they are reachable only through
 <i>easyjson.core</i>.&nbsp; <i>write</i>, <i>append</i>, <i>write_add</i> and
 <i>base_json</i> are exported, so the module is inconsistent until they are added.
-<p>The seventh is that the known bug test is green today for the wrong reason.&nbsp;
-A reviewer reading a green suite could conclude the package is fully working, which
-is false until the fix lands.
+<p>The seventh is that <i>read_chaine</i> and <i>delete</i> have no return
+annotation at all.&nbsp; They are covered by
+<i>check_untyped_defs = true</i> in <i>pyproject.toml</i>, so <i>mypy</i> checks
+their bodies, but their callers still see an <i>Any</i> return.
 </body>
 </html>
