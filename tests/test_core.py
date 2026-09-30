@@ -182,14 +182,32 @@ class WriteAddTests(TempFileTestCase):
 
         self.assertEqual(self.read_json(), {"city": "Nimes"})
 
-    def test_write_add_does_not_replace_existing_key(self):
-        """write_add() must leave an already present key untouched."""
+    def test_write_add_keeps_existing_value_and_grows_a_list(self):
+        """write_add() must never drop a value, it appends to a list instead."""
         self.write_json({"city": "Paris"})
 
-        result = core.write_add(self.path, "city", "Lyon")
+        core.write_add(self.path, "city", "Lyon")
 
-        self.assertEqual(self.read_json(), {"city": "Paris"})
-        self.assertEqual(result, (self.path, False, "Lyon"))
+        self.assertEqual(self.read_json(), {"city": ["Paris", "Lyon"]})
+
+    def test_write_add_can_be_called_several_times_on_one_key(self):
+        """Successive calls on the same key must accumulate in call order."""
+        self.write_json({})
+
+        core.write_add(self.path, "ville", "Nimes")
+        core.write_add(self.path, "ville", "Lyon")
+        core.write_add(self.path, "ville", "Paris")
+
+        self.assertEqual(self.read_json(), {"ville": ["Nimes", "Lyon", "Paris"]})
+
+    def test_write_add_ignores_duplicate_value(self):
+        """write_add() must not add the same value twice."""
+        self.write_json({})
+
+        core.write_add(self.path, "ville", "Lyon")
+        core.write_add(self.path, "ville", "Lyon")
+
+        self.assertEqual(self.read_json(), {"ville": ["Lyon"]})
 
     def test_write_add_converts_content_to_string(self):
         """write_add() must store the value as a string."""
@@ -237,7 +255,7 @@ class WriteAddTests(TempFileTestCase):
 
         result = core.write_add(self.path, "", "Lyon")
 
-        self.assertEqual(result, (self.path, "", "Lyon"))
+        self.assertEqual(result, (self.path, False, "Lyon"))
         self.assertEqual(self.read_json(), {})
 
 

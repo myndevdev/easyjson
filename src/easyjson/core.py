@@ -43,12 +43,13 @@ def append(file, contenue) -> tuple[str, Any]:
     return (file, contenue)
 
 
-def write_add(file, chaine, contenue) -> tuple[str, bool, float]:
+def write_add(file, chaine, contenue) -> tuple[str, bool, Any]:
     """Add the key chaine with the value contenue to an existing JSON object.
 
     The value goes through an f-string, so it is always stored as text.
-    An existing key is not replaced.
-    Returns the (file, chaine, contenue) tuple.
+    Nothing is ever removed: if chaine already exists, the value is appended
+    to a list, so the first call stores a scalar and later calls grow a list.
+    Returns the (file, added, contenue) tuple.
     """
     try:
         if len(chaine) > 0:
@@ -56,9 +57,14 @@ def write_add(file, chaine, contenue) -> tuple[str, bool, float]:
                 data = json.load(f)
 
             if chaine in data:
-                return file, False, contenue
-
-            data[chaine] = f"{contenue}"
+                current = data[chaine]
+                if not isinstance(current, list):
+                    current = [current]
+                if f"{contenue}" not in current:
+                    current.append(f"{contenue}")
+                data[chaine] = current
+            else:
+                data[chaine] = f"{contenue}"
 
             with open(file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4, ensure_ascii=False)
@@ -68,7 +74,7 @@ def write_add(file, chaine, contenue) -> tuple[str, bool, float]:
     except (FileNotFoundError, json.JSONDecodeError):
         raise
 
-    return (file, chaine, contenue)
+    return (file, False, contenue)
 
 
 def read_chaine(file, chaine):
