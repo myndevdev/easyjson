@@ -11,7 +11,7 @@ def write(file, contenue) -> tuple[str, str]:
     try:
         with open(file, "w", encoding="utf-8") as f:
             f.write(contenue)
-    except ValueError as e:
+    except (ValueError, Exception, OSError) as e:
         print(f"Error {e}")
         raise
     return (file, contenue)
@@ -37,7 +37,7 @@ def append(file, contenue) -> tuple[str, Any]:
 
         with open(file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-    except ValueError as e:
+    except (ValueError, OSError) as e:
         print(f"Error {e}")
         raise
     return (file, contenue)
@@ -83,8 +83,10 @@ def read_chaine(file, chaine):
             data = json.load(f)
         print(data[chaine])
 
-    except ValueError as e:
+    except (ValueError, OSError) as e:
         print(f"Error {e}")
+        # if want d'ont stop code use return actualy beta else use raise
+        # return ""
         raise
 
     return data[chaine]
@@ -104,7 +106,7 @@ def delete(file, chaine) -> tuple[str, str]:
 
         with open(file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
-    except ValueError as e:
+    except (ValueError, OSError) as e:
         print(f"Error {e}")
         raise
 
@@ -127,7 +129,7 @@ def base_json() -> dict[str, dict[str, str]]:
         with open("data.json", "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
 
-    except Exception as e:
+    except (Exception, OSError) as e:
         print(f"Error {e}")
         raise
 
